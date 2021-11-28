@@ -47,11 +47,25 @@ func (c *Client) RequestJSON(v interface{}, method, url string) error {
 	body, status := res.GetBody(), res.GetStatus()
 	defer body.Close()
 
+	decoder := json.NewDecoder(body)
+
 	if status < 200 || status > 299 {
-		return errors.New("received status error " + strconv.FormatInt(int64(status), 10))
+		raw := struct {
+			Cause string `json:"cause,omitempty"`
+		}{}
+
+		if err = decoder.Decode(&raw); err != nil {
+			return err
+		}
+
+		if raw.Cause == "" {
+			raw.Cause = "Unknown"
+		}
+
+		return errors.New("Received error response. Code: " + strconv.FormatInt(int64(status), 10) + " Cause: " + raw.Cause)
 	}
 
-	if err := json.NewDecoder(body).Decode(&v); err != nil {
+	if err = decoder.Decode(&v); err != nil {
 		return err
 	}
 
