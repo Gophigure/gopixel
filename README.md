@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	APIKey hypixel.Key  = "key"
-	UUID   hypixel.UUID = "uuid"
+	APIKey hypixel.APIKey = "key"
+	UUID   hypixel.UUID   = "uuid"
 )
 
 func main() {
