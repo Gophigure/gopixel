@@ -14,6 +14,7 @@ type Client struct {
 	Key        hypixel.APIKey
 	Context    context.Context
 	HttpClient httputil.Client
+	uuidStore  map[string]hypixel.UUID
 }
 
 func New(ctx context.Context, key hypixel.APIKey, client httputil.Client) *Client {
@@ -21,6 +22,7 @@ func New(ctx context.Context, key hypixel.APIKey, client httputil.Client) *Clien
 		Key:        key,
 		Context:    ctx,
 		HttpClient: client,
+		uuidStore: make(map[string]hypixel.UUID),
 	}
 }
 
@@ -70,6 +72,25 @@ func (c *Client) RequestJSON(v interface{}, method, url string) error {
 	}
 
 	return nil
+}
+
+func (c *Client) NameToUUID(name string) (hypixel.UUID, error) {
+	if uuid, ok := c.uuidStore[name]; ok {
+		return uuid, nil
+	}
+
+	raw := struct {
+		ID hypixel.UUID `json:"id"`
+	}{}
+
+	if err := c.RequestJSON(&raw, "GET", "https://api.mojang.com/users/profiles/minecraft/"+name); err != nil {
+		return "", err
+	}
+
+	raw.ID.Format()
+	c.uuidStore[name] = raw.ID
+
+	return raw.ID, nil
 }
 
 func (c *Client) KeyInfo() (*hypixel.APIKeyInformation, error) {
