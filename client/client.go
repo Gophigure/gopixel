@@ -23,8 +23,10 @@ type (
 		value interface{}
 	}
 	Cabinet struct {
-		uuidStore   map[string]hypixel.UUID
-		playerStore map[hypixel.UUID]*store
+		keyInfoStore map[hypixel.UUID]*store
+		uuidStore    map[string]*store
+		playerStore  map[hypixel.UUID]*store
+		statusStore  map[hypixel.UUID]*store
 	}
 )
 
@@ -39,8 +41,10 @@ func New(ctx context.Context, key hypixel.APIKey, client httputil.Client) *Clien
 
 func newCabinet() *Cabinet {
 	return &Cabinet{
-		uuidStore:   make(map[string]hypixel.UUID),
-		playerStore: make(map[hypixel.UUID]*store),
+		keyInfoStore: make(map[hypixel.UUID]*store),
+		uuidStore:    make(map[string]*store),
+		playerStore:  make(map[hypixel.UUID]*store),
+		statusStore:  make(map[hypixel.UUID]*store),
 	}
 }
 
@@ -93,8 +97,8 @@ func (c *Client) RequestJSON(v interface{}, method, url string) error {
 }
 
 func (c *Client) NameToUUID(name string) (hypixel.UUID, error) {
-	if uuid, ok := c.Cabinet.uuidStore[name]; ok {
-		return uuid, nil
+	if uuid, ok := c.Cabinet.uuidStore[name]; ok && time.Since(uuid.set) < 24 * time.Hour {
+		return uuid.value.(hypixel.UUID), nil
 	}
 
 	raw := struct {
@@ -106,7 +110,10 @@ func (c *Client) NameToUUID(name string) (hypixel.UUID, error) {
 	}
 
 	raw.ID.Format()
-	c.Cabinet.uuidStore[name] = raw.ID
+	c.Cabinet.uuidStore[name] = &store{
+		set:   time.Now(),
+		value: raw.ID,
+	}
 
 	return raw.ID, nil
 }
@@ -147,6 +154,10 @@ func (c *Client) Player(uuid hypixel.UUID) (*hypixel.Player, error) {
 }
 
 func (c *Client) PlayerStatus(uuid hypixel.UUID) (*hypixel.PlayerStatus, error) {
+	if status, ok := c.Cabinet.statusStore[uuid]; ok && time.Since(status.set) > time.Hour {
+		return status.value.(*hypixel.PlayerStatus), nil
+	}
+
 	raw := struct {
 		Success bool                 `json:"success"`
 		Status  hypixel.PlayerStatus `json:"session,omitempty"`
@@ -154,6 +165,11 @@ func (c *Client) PlayerStatus(uuid hypixel.UUID) (*hypixel.PlayerStatus, error) 
 
 	if err := c.RequestJSON(&raw, "GET", hypixel.BaseURL+"status?uuid="+string(uuid)); err != nil {
 		return nil, err
+	}
+
+	c.Cabinet.statusStore[uuid] = &store{
+		set: time.Now(),
+		value: &raw.Status,
 	}
 
 	return &raw.Status, nil
